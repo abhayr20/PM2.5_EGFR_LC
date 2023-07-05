@@ -1,183 +1,95 @@
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
+
 setwd("~/Desktop/AIIMS/letter_to_editor")
 
-library(tidyverse)
-library(rnaturalearth) # World Map Data from Natural Earth
-library(sf) # Geographic Simple Features in R
-library(wbstats)
-library(dplyr)
-library(ggplot2)
-library(maps)
-library(viridis)
-library(RColorBrewer)
-library(scales)
-library(ggrepel)
-library(ggpubr)
-
+western_countries <- c('AUS', 'AUT', 'CAN', 'CZE', 'DEU',
+                       'ESP', 'FIN', 'FRA', 'GBR', 'GRC',
+                       'ITA', 'LTU', 'NLD', 'NOR', 'POL',
+                       'PRT', 'RUS', 'SVK', 'SWE', 'USA')
 
 ## Get input data
 globocan_lc_incidence <- read.csv("data/Global_estimated_lung_cancer_incidence_rates_both_sexes.csv")
 EGFR_lc <- read.csv("data/EGFR_positive_estimated_incidence.csv")
 df_pol <- read.csv("data/PM2.5-air-pollution.csv")
-df_clean_feul <- read.csv("data/Clean_fuel.csv")
+df_clean_fuel <- read.csv("data/Clean_fuel.csv")
 
-  
-# prepare Lung cancer incidence rates for 36 countries
+# Prepare Lung cancer incidence rates for 36 countries
 df_EGFR <- inner_join(globocan_lc_incidence, EGFR_lc, by = "ISO_code")
 df_EGFR <- subset(df_EGFR, select = -Country_name)
 df_EGFR$EGFR_incidence_rate <- (df_EGFR$LC_ASR_both_sexes * df_EGFR$mEGFR_freq_overall)/100
 
-
-#filter df_pol to only year 2017
+# Filter df_pol to only year 2017
 df_pol <- filter(df_pol, year == 2017)
-df_clean_feul <- filter(df_clean_feul, Year == 2017)
+df_clean_fuel <- filter(df_clean_fuel, Year == 2017)
 
-## ----Exploring data distribution-----------------
-# sqrt transformation to improve color palette
-df_EGFR %>%
-  ggplot() +
-  geom_histogram(aes(EGFR_incidence_rate)) +
-  theme_minimal() +
-  scale_x_log10()
-
-## ----Download world data-------------------------
-world <- ne_countries(scale="medium", returnclass="sf") %>%
-  filter(admin != "Antarctica")
-
-
-## ----Plot EGFR data on world map------------------------------
-world_EGFR <- world %>%
-  left_join(df_EGFR, by = c("iso_a3" = "ISO_code")) %>%
-  ggplot() +
-  geom_sf(aes(fill = EGFR_incidence_rate)) +
-  scale_fill_viridis_c(
-    trans = "identity",
-    labels = function(x) paste0(round(x, 1))) +
-  theme_bw() +
-  theme(
-    panel.background = element_rect(fill = "aliceblue"),
-    plot.title = element_text(face = "bold", size = rel(1.5), hjust = 0.5),
-    legend.text = element_text(size = rel(0.8)),
-    legend.title = element_text(size = rel(0.8))) +
-  labs(
-    title = "Estimated incidence rate of EGFR positive NSCLC (per 100,000)",
-    fill = "EGFR+ NSCLC incidence per 100,000") 
-
-
-## ----Plot PM 2.5 levels data on world map------------------------------
-world_pol <- world %>%
-  left_join(df_pol, by = c("iso_a3" = "ISO_code")) %>%
-  ggplot() +
-  geom_sf(aes(fill = PM2.5)) +
-  scale_fill_viridis_c(
-    trans = "identity",
-    labels = function(x) paste0(round(x, 1))) +
-  theme_bw() +
-  theme(
-    panel.background = element_rect(fill = "aliceblue"),
-    plot.title = element_text(face = "bold", size = rel(1.5), hjust = 0.5),
-    legend.text = element_text(size = rel(0.8)),
-    legend.title = element_text(size = rel(0.8))) +
-  labs(
-    fill = "PM2.5 level (ug/m3)",
-    title = "Global PM2.5 levels in 2017") 
-
-## ----Plot clean fuel data on world map------------------------------
-world_clean_fuel <- world %>%
-  left_join(df_clean_feul, by = c("iso_a3" = "ISO_code")) %>%
-  ggplot() +
-  geom_sf(aes(fill = Clean_fuels)) +
-  scale_fill_viridis_c(
-    trans = "identity",
-    labels = function(x) paste0(round(x, 1))) +
-  theme_bw() +
-  theme(
-    panel.background = element_rect(fill = "aliceblue"),
-    plot.title = element_text(face = "bold", size = rel(1.5), hjust = 0.5),
-    legend.text = element_text(size = rel(0.8)),
-    legend.title = element_text(size = rel(0.8))) +
-  labs(
-    fill = "% population using clean fuels",
-    title = "Global access to clean fuels for cooking in 2017") 
-
-
-
-## ----Scatterplot PM 2.5 levels vs EGFR+ NSCLC incidence rate----------------
-options(ggrepel.max.overlaps = Inf)
-
+# Get final dataframes for modeling
 df_EGFR_pol <- merge(df_EGFR, df_pol, by = "ISO_code") %>%
   select(ISO_code, Country, PM2.5, EGFR_incidence_rate)
 
+west_df_EGFR_pol <- df_EGFR_pol[df_EGFR_pol$ISO_code %in% western_countries,]
+
+## Scatterplot PM 2.5 levels vs EGFR+ NSCLC incidence rate
+options(ggrepel.max.overlaps = Inf)
 
 # Create the scatter plot using ggplot2 and ggrepel
 p <- ggplot(df_EGFR_pol, aes(x = PM2.5, y = EGFR_incidence_rate, label = Country)) +
-  geom_point(size = 3, color = "blue") +
+  geom_point(size = 3, color = ifelse(df_EGFR_pol$ISO_code %in% western_countries, "red", "blue")) +
   geom_text_repel(size = 6, nudge_x = 0.25, nudge_y = 0.07) +
-  geom_smooth(method = "lm", se = FALSE, color = alpha("red", 0.3), formula = y ~ x) +
-  
+  geom_smooth(data = df_EGFR_pol, method = "lm", se = FALSE, color = "blue", formula = y ~ x) +
+  geom_smooth(data = west_df_EGFR_pol, method = "lm", se = FALSE, color = "red", formula = y ~ x + I(x > 5)) +
   labs(title = "Effect of outdoor pollution on EGFR driven LC",
        x = "PM2.5 levels (µg/m³) in 2017",
        y = "Estimated EGFR driven LC incidence (per 100,000)") +
-  
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5, size = 32, face = "bold"),
         axis.title = element_text(size = 20),
         axis.text = element_text(size = 20),
         plot.caption = element_text(hjust = 1, size = 16))
 
-# Calculate the R value
+# Calculate the R value for df_EGFR_pol
 outdoor_model <- lm(EGFR_incidence_rate ~ PM2.5, data = df_EGFR_pol)
-summary(outdoor_model)
-
 r_squared <- summary(outdoor_model)$r.squared
-r_value <- round(sqrt(r_squared), 2)
-p_value <- 0.487
+p_value <- summary(outdoor_model)$coef[2, 4]  # Extract the p-value
 
-# Add the R value to the plot
+# Calculate the R value for west_df_EGFR_pol
+outdoor_model_west <- lm(EGFR_incidence_rate ~ PM2.5, data = west_df_EGFR_pol)
+r_squared_west <- summary(outdoor_model_west)$r.squared
+p_value_west <- summary(outdoor_model_west)$coef[2, 4]  # Extract the p-value
+
+# Add the R-squared and p-value to the plot
 scatter_EGFR_PM2.5 <- p +
   annotate("text", x = max(df_EGFR_pol$PM2.5), y = max(df_EGFR_pol$EGFR_incidence_rate),
-           label = paste0("R² = ", round(r_squared, 3), "\n", "p = ", p_value),
-           hjust = 1, vjust = 1, size = 10, fontface = "bold")
+           label = paste0("All Countries\nR² = ", round(r_squared, 3), "\np-value = ", round(p_value, 3)),
+           hjust = 1, vjust = 2.5, size = 4, fontface = "bold", color = "blue") +
+  annotate("text", x = max(df_EGFR_pol$PM2.5), y = max(df_EGFR_pol$EGFR_incidence_rate),
+           label = paste0("Western Countries only\nR² = ", round(r_squared_west, 3), "\np-value = ", round(p_value_west, 3)),
+           hjust = 1, vjust = 1, size = 4, fontface = "bold", color = "red")
+
+# Display the scatter plot with R-squared, p-values, and updated settings
+scatter_EGFR_PM2.5
 
 
-## ----Scatterplot clean feul levels vs EGFR+ NSCLC incidence rate--------------
 
-df_EGFR_fuel <- merge(df_EGFR, df_clean_feul, by = "ISO_code") %>%
-  select(ISO_code, Country, Clean_fuels, EGFR_incidence_rate)
+'''
+Instructions:
 
-# Create the scatter plot using ggplot2 and ggrepel
-q <- ggplot(df_EGFR_fuel, aes(x = Clean_fuels, y = EGFR_incidence_rate, label = Country)) +
-  geom_point(size = 3, color = "blue") +
-  geom_text_repel(size = 5, nudge_x = 0.1, nudge_y = 0.1) +
-  geom_smooth(method = "lm", se = FALSE, color = alpha("red", 0.3), formula = y ~ x) +
-  
-  labs(title = "Effect of indoor pollution on EGFR driven LC",
-       x = "Percentage of household with access to clean cooking fuels in 2017",
-       y = "Estimated EGFR driven LC incidence (per 100,000)") +
-  
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5, size = 32, face = "bold"),
-        axis.title = element_text(size = 20),
-        axis.text = element_text(size = 20),
-        plot.caption = element_text(hjust = 1, size = 16))
-
-# Calculate the R value
-indoor_model <- lm(EGFR_incidence_rate ~ Clean_fuels, data = df_EGFR_fuel)
-summary(indoor_model)
-
-r_squared <- summary(indoor_model)$r.squared
-r_value <- round(sqrt(r_squared), 2)
-p_value <- 0.646
-
-# Add the R value to the plot
-scatter_EGFR_fuel <- q +
-  annotate("text", x = max(df_EGFR_pol$PM2.5), y = max(df_EGFR_fuel$EGFR_incidence_rate),
-             label = paste0("R² = ", round(r_squared, 3), "\n", "p = ", p_value),
-             hjust = 1, vjust = 1, size = 10, fontface = "bold")
+I have 2 dataframes: df_EGFR_pol and west_df_EGFR_pol. 
+df_EGFR_pol has 4 columns which are: "ISO_code", "Country", "PM2.5" and "EGFR_incidence_rate". It also has 36 rows, each row containing data for 1 country
+west_df_EGFR_pol is a subset of df_EGFR_pol having the 4 same columns but only 20 rows (20 unique countries).
+I want to do a linear regression in R with PM2.5 on x axis and EGFR_incidence_rate on the y axis along with proper statistical testing.
+I want to fit 2 regression lines first using data from all countries df_EGFR_pol and second using data from west_df_EGFR_pol.
+I want the dot for the countries in west_df_EGFR_pol to be coloured red, the rest of the countries should be coloured blue. This should be accompanied by labels outside the plot area in the bottom right corner.
+I should calculate the R-sqaured and p-values for both the models again, and report both outside the plot area in the bottom right corner
+I need to manipulate the font size to make the graph look pretty
 
 
-## -------Save figures-------------
-ggsave("world_clean_fuel.png", world_clean_fuel)
-ggsave("world_EGFR.png", world_EGFR)
-ggsave("world_pol.png", world_pol)
-ggsave("scatter_EGFR_fuel.png", scatter_EGFR_fuel)
-ggsave("scatter_EGFR_PM2.5.png", scatter_EGFR_PM2.5)
+
+To fix these issues:
+1. the y-axis should start at 0.
+2. there should be a red line for outdoor_model_west and a blue line for outdoor_model, both on the same graph.
+3. There should be R² and p-values for both outdoor_model_west and outdoor_modelcolured red and blue respectively. Reduce their font size at fit them in the bottom right corner of the graph.
+4. There should be a label for the color red = Western Countries only
+
+'''
