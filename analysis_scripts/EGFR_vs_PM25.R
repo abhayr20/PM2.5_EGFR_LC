@@ -42,8 +42,8 @@ options(ggrepel.max.overlaps = Inf)
 p <- ggplot(df_EGFR_pol, aes(x = PM2.5, y = EGFR_incidence_rate, label = Country)) +
   geom_point(size = 3, color = ifelse(df_EGFR_pol$ISO_code %in% western_countries, "red", "blue")) +
   geom_text_repel(size = 6, nudge_x = 0.25, nudge_y = 0.07) +
-  geom_smooth(method = "lm", se = FALSE, color = alpha("black", 0.5), formula = y ~ x) +
-  geom_smooth(data = west_df_EGFR_pol, method = "lm", se = FALSE, color = alpha("red", 0.7), formula = y ~ x + I(x > 5)) +
+  geom_smooth(method = "lm", se = FALSE, fullrange = TRUE, color = alpha("black", 0.5), formula = y ~ x) +
+  geom_smooth(data = west_df_EGFR_pol, method = "lm", se = FALSE, color = alpha("red", 0.7), formula = y ~ x + I(x > 5), fullrange = TRUE) +
   labs(title = "Effect of outdoor pollution on EGFR driven LC",
        x = "PM2.5 levels (µg/m³) in 2017",
        y = "Estimated EGFR driven LC incidence (per 100,000)") +
@@ -67,10 +67,10 @@ p_value_west <- summary(outdoor_model_west)$coef[2, 4]  # Extract the p-value
 scatter_EGFR_PM2.5 <- p +
   annotate("text", x = max(df_EGFR_pol$PM2.5), y = max(df_EGFR_pol$EGFR_incidence_rate),
            label = paste0("All Countries\nR² = ", round(r_squared_out, 3), "\np-value = ", round(p_value_out, 3)),
-           hjust = 1, vjust = 2.5, size = 4, fontface = "bold", color = "black") +
+           hjust = 1, vjust = 3.5, size = 4, fontface = "bold", color = "black") +
   annotate("text", x = max(df_EGFR_pol$PM2.5), y = max(df_EGFR_pol$EGFR_incidence_rate),
            label = paste0("Western Countries only\nR² = ", round(r_squared_west, 3), "\np-value = ", round(p_value_west, 3)),
-           hjust = 1, vjust = 1, size = 4, fontface = "bold", color = "red")
+           hjust = 1, vjust = 2, size = 4, fontface = "bold", color = "red")
 
 # Display the scatter plot with R-squared, p-values, and updated settings
 scatter_EGFR_PM2.5
